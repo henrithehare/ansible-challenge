@@ -1,0 +1,42 @@
+---
+- name: ansible-sandbox - AWS Resource Destroy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Delete EC2 instance
+      amazon.aws.ec2:
+        region: "{{ region }}"
+        key_name: "{{ stack_name }}-key"
+        image: "{{ ami_id }}"
+        group: "{{ stack_name }}-security_group"
+        instance_type: "{{ instance_type }}"
+        wait: true
+        user_data: "{{ lookup('file', 'files/' + item + '.sh') }}"
+        count_tag:
+          Name: "{{ stack_name }}-web-{{ item }}"
+        exact_count: 0
+        instance_tags:
+          Name: "{{ stack_name }}-web-{{ item }}"
+          Stack: "{{ stack_name }}"
+          ServerGroup: "{{ item }}"
+      loop:
+        - deploy1
+        - deploy2
+
+    - name: Delete SSH key pair from AWS
+      amazon.aws.ec2_key:
+        name: "{{ stack_name }}-key"
+        region: "{{ region }}"
+        state: absent
+
+    - name: Delete the local private key
+      file:
+        path: "{{ ansible_ssh_private_key_file }}"
+        state: absent
+
+    - name: Delete Security Group
+      amazon.aws.ec2_group:
+        name: "{{ stack_name }}-security_group"
+        region: "{{ region }}"
+        state: absent

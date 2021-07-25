@@ -1,0 +1,14 @@
+---
+# https://docs.ansible.com/ansible/latest/collections/amazon/aws/aws_ec2_inventory.html
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - ap-southeast-2
+
+keyed_groups:
+  - key: tags.Stack
+    separator: ""
+    leading_separator: false
+  - key: tags.ServerGroup
+    separator: ""
+    leading_separator: false

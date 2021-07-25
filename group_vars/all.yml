@@ -1,1 +1,8 @@
 ---
+ansible_ssh_private_key_file: "./output/{{ stack_name }}.pem"
+instance_type: t2.small
+region: ap-southeast-2
+stack_name: ansible-sandbox
+ami_id: ami-0c9fe0dec6325a30c
+ssh_allowed_cidr_ips:
+  - 0.0.0.0/0

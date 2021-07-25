@@ -1,0 +1,105 @@
+---
+- name: ansible-sandbox - Sleep and refresh inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Pause for 1 minute while the EC2 instance initialises
+      pause:
+        minutes: 1
+
+    - name: Refresh the inventory to include the newly provisioned EC2 instances
+      meta: refresh_inventory
+
+- name: ansible-sandbox - Run hardening steps
+  hosts:
+    - deploy1
+    - deploy2
+  become: true
+  remote_user: ec2-user
+  tasks:
+    - name: Wait for cloud init to complete
+      command: cloud-init status --wait
+      changed_when: false
+
+    # - name: Ensure SELinux is enforcing
+    #   selinux:
+    #     policy: targeted
+    #     state: enforcing
+
+    - name: Set up the timezone
+      timezone:
+        name: Australia/Adelaide
+
+    - name: AUTH-9230 Configure maximum encryption algorithm rounds
+      lineinfile:
+        path: /etc/login.defs
+        line: '{{ item.name }} {{ item.value }}'
+        regexp: '^{{ item }}'
+        state: present
+      loop:
+        - {name: SHA_CRYPT_MIN_ROUNDS, value: '5000'}
+        - {name: SHA_CRYPT_MAX_ROUNDS, value: '5000'}
+        - {name: UMASK, value: '027'}
+        - {name: PASS_MAX_DAYS, value: '365'}
+        - {name: PASS_MIN_DAYS, value: '10'}
+
+    - name: Add secure banner
+      copy:
+        content: |
+          ********************************************************************
+          *                                                                  *
+          * This system is for the use of authorized users only.  Usage of   *
+          * this system may be monitored and recorded by system personnel.   *
+          *                                                                  *
+          * Anyone using this system expressly consents to such monitoring   *
+          * and is advised that if such monitoring reveals possible          *
+          * evidence of criminal activity, system personnel may provide the  *
+          * evidence from such monitoring to law enforcement officials.      *
+          *                                                                  *
+          ********************************************************************
+        dest: "{{ item }}"
+        mode: '0644'
+      loop:
+        - /etc/issue
+        - /etc/issue.net
+
+    - name: Ensure that the SSH configuration is secure
+      lineinfile:
+        regex: '^#?\ ?{{ item.name }}\ [^ ]+$'
+        line: "{{ item.name }} {{ item.value | default('no') }}"
+        path: /etc/ssh/sshd_config
+        validate: 'sshd -t -f %s'
+      loop:
+        - {name: AllowAgentForwarding}
+        - {name: AllowTcpForwarding}
+        - {name: Banner, value: '/etc/issue'}
+        - {name: ClientAliveCountMax, value: '2'}
+        - {name: Compression}
+        - {name: LogLevel, value: 'VERBOSE'}
+        - {name: MaxAuthTries, value: '3'}
+        - {name: MaxSessions, value: '2'}
+        - {name: PasswordAuthentication}
+        - {name: PermitEmptyPasswords}
+        - {name: TCPKeepAlive}
+        - {name: X11Forwarding}
+      notify: restart-sshd
+
+    - name: Set default umask
+      replace:
+        regexp: '^(\s*umask) [0-9]+$'
+        replace: '\1 027'
+        path: "{{ item }}"
+      tags: set-umask
+      loop:
+        - /etc/bashrc
+        - /etc/csh.cshrc
+        - /etc/profile
+
+  handlers:
+    - name: Restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+      listen: restart-sshd

@@ -1,0 +1,61 @@
+---
+- name: ansible-sandbox - AWS Resource Setup
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Create SSH key pair in AWS
+      amazon.aws.ec2_key:
+        name: "{{ stack_name }}-key"
+        region: "{{ region }}"
+      register: "ec2_ssh_result"
+      notify: ec2-ssh-download
+
+    - name: Configure Security Group
+      amazon.aws.ec2_group:
+        name: "{{ stack_name }}-security_group"
+        description: allow incoming ports
+        region: "{{ region }}"
+        state: present
+        rules:
+          - proto: tcp
+            ports:
+              - 80
+              - 443
+            cidr_ip: 0.0.0.0/0
+            rule_desc: HTTP/HTTPS
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: "{{ ssh_allowed_cidr_ips }}"
+            rule_desc: SSH
+
+    - name: Provision EC2 instance
+      amazon.aws.ec2:
+        region: "{{ region }}"
+        key_name: "{{ stack_name }}-key"
+        image: "{{ ami_id }}"
+        group: "{{ stack_name }}-security_group"
+        instance_type: "{{ instance_type }}"
+        wait: true
+        user_data: "{{ lookup('file', 'files/' + item + '.sh') | replace('_API_KEY_DEPLOY', API_KEY_DEPLOY) }}"
+        count_tag:
+          Name: "{{ stack_name }}-web-{{ item }}"
+        exact_count: 1  # one of each in the loop
+        instance_tags:
+          Name: "{{ stack_name }}-web-{{ item }}"
+          Stack: "{{ stack_name }}"
+          ServerGroup: "{{ item }}"
+      vars:
+        API_KEY_DEPLOY: "{{ lookup('env', 'API_KEY_' + (item | upper)) }}"
+      loop:
+        - deploy1
+        - deploy2
+
+  handlers:
+    - name: Download the private key
+      copy:
+        content: "{{ ec2_ssh_result.key.private_key }}"
+        dest: "{{ ansible_ssh_private_key_file }}"
+        mode: 0400
+      listen: ec2-ssh-download

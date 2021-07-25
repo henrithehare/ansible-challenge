@@ -1,44 +1,96 @@
 # Ansible Technical Challenge
 
-Hi there, welcome to our git repo for a basic ansible skills test for a position in our technical team.
+## Overview
 
-While this test is somewhat farcical, the objective is to get a sense of your ansible skills by having you deploy some infrastructure with some static content hosted on it. We'd like you to fork our git repository, add your submission and send a link for us to clone it on completion. We'll then test it out in our lab and marvel at your good work. The expectation is that this should take no more than a few hours to complete (no need to boil the ocean).
+The Ansible playbook in this repository will provision two AWS EC2 instances, a Security Group, and an SSH key pair for administering the instances if needed.
+Each EC2 instance will be hosting static content from the [One HTML Page Challenge](https://onehtmlpagechallenge.com/).
+As part of the deployment, hardening steps will be executed, and a [Lynis](https://cisofy.com/lynis/) security scan and report generated against each instance upon deployment completion.
 
-If you have any questions, or anything in the challenge is not clear, please reach out to us so that we can promptly provide clarification.
+## Prerequisites
 
-## Scope of the test:
+* Ansible - Follow the [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html) paying attention to OS based pre-requisites.
+* AWS SDK for Python (boto3)
+  > NOTE: `boto` is the legacy SDK, however, it is required for `amazon.aws.ec2`. The next release of the `amazon.aws` collection will include a new `ec2_instance` module, which will no longer rely on `boto`.
 
-The website https://onehtmlpagechallenge.com/ has a selection of little projects each in a single html file. We'd like you to choose a minimum of two of them and:
+  ```bash
+  pip install --user boto botocore boto3
+  ```
 
-- Use Ansible deploy a minimum of two virtual machines on the cloud or hypervisor of your choice (public cloud preferred, however if you have a lab using VMware, KVM etc that's absolutely fine).
-- The virtual machines should have httpd installed and each host a different html file for example:
-	- Virtual Machine #1 hosts html file with the car game and Virtual Machine #2 hosts the html file with the snake game.
-	- Both Virtual machines should be deployed together along with the associated software installation and configuration.
-- Any required VPCs, network security groups, SSH key pairs etc should be included as part of your infrastructure deployment.
-- Add some basic configuration management to the systems you deploy (e.g. chrony, timezone, SSH hardening, installing packages that you find useful and should be in a Linux SOE).
-- Think about security hardening of the infrastructure and operating systems you deploy. Additionally securing the webservices with SSL. Self-signed certs are fine.
-- Your playbooks/roles should be idempotent and pass ansible-lint.
-- Ideally you will use a dynamic inventory as part of your submission.
-- Using content from ansible-galaxy is fine, however we'd like to see your work rather than making efficient use of community provided content.
-- Don't overthink or over-engineer it, however we'd like to see effective use of loops/variables/logic in your submission.
-- How you lay out the playbooks/tasks/roles is up to you. There is a basic structure in this repository to get you started.
+## Local Setup
 
-Essentially the way we will be testing this is by doing the following:
+These steps were executed and verfified on a macOS and Linux system
 
+## Objectives
+
+In no particular order, the following will be deployed 
+- Amazon EC2 T2 instances (minimum spec `t2.small`)
+- Kubernetes (K3s)
+- [Bitnami NGINX Helm chart](https://github.com/bitnami/charts/tree/master/bitnami/nginx)
+- Let's Encrypt public certificates (ACME v2 Production)
+
+## Usage
+
+1. Export [named profile for the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html)
+
+```bash
+export AWS_PROFILE=your-aws-profile
 ```
-ansible-lint site.yml
+
+2. Export Dynamic DNS API Keys (encrypted with Ansible Vault)
+
+```bash
+for vaultSecret in $(ansible-vault view api_keys.txt); 
+  do export "${vaultSecret}";
+done
+```
+
+3. Install Ansible requirements and run playbook
+
+```bash
 ansible-galaxy collection install -r collections/requirements.yml
-ansible-playbook -i inventory/<your dynamic inventory script> site.yml
+ansible-playbook site.yml
 ```
 
-## Submission Criteria:
+## Website URLs
 
-- There should not be any manual steps, we should be able to clone your repository and run your site.yml to deploy everything in one shot.
-- Any pre-requisites should be documented clearly.
-- Use the Linux distribution of your choice, however one of Fedora/CentOS/RHEL is preferred.
-- There should be no passwords or keypairs etc in your repository. Anything sensitive you have in there should be protected with ansible vault at a minimum.
+The Ansible playbook will download static content, and provision Let's Encrypt public certificates. The whole process should complete in 15 minutes, however please allow up to 30 minutes for DNS to be updated and Let's Encrypt certificates to be provisioned. When ready, the websites are avaialble at the following URLs:
 
-## Bonus Points:
+- https://henrihare.mooo.com
+- https://henrithe.mooo.com
 
-- Add a second non-compliant submission where you would show us how you'd host this content in something other than a VM hosting a single file (e.g. containers or something cloud-native)
-- Consider if you should choose the insult generator one or not (we dare you) :)
+## Lynis Security Scan
+
+Lynis security scan and report for each instance is generated and stored in `output/`.  
+e.g. to view the report (with ANSI colours), run `less -R output/lynis-ec2-X-X-X-X.txt`.  
+
+Sample view:  
+![Lynis Scan](images/lynis-scan.png)
+
+## SSH Access
+
+1. If SSH access is required, ensure that the allowed IP address/addresses are whitelisted before running the Ansible playbook
+
+```bash
+group_vars/all.yml
+```
+
+2. Example syntax to SSH into an instance
+
+```bash
+ssh -i files/ansible-sandbox.pem ec2-user@x.x.x.x
+```
+
+## Cleaning up
+
+> NOTE: The following syntax will delete the provisioned resources in AWS and the downloaded private key.
+
+```bash
+ansible-playbook ec2-destroy.yml
+```
+
+## Other Notes
+
+* Ansible config settings are stored in `ansible.cfg`
+* The EC2 inventory file is set to `aws_ec2.yml`
+* Strict host key checking is disabled to omit `The authenticity of host ... can't be established.` warning
+* This is a Proof of concept (POC) set up and not proven to be run in a production environment

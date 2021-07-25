@@ -1,1 +1,9 @@
 ---
+- name: AWS Resource Setup
+  import_playbook: ec2-setup.yml
+
+- name: Run hardening steps
+  import_playbook: harden.yml
+
+- name: Run Lynis security scan
+  import_playbook: lynis.yml

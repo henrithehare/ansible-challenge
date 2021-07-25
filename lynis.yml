@@ -1,0 +1,37 @@
+---
+- name: ansible-sandbox - Run security scanning with Lynis
+  hosts:
+    - deploy1
+    - deploy2
+  become: true
+  remote_user: ec2-user
+  tasks:
+    - name: Ensure the Lynis repository is present
+      yum_repository:
+        name: cisofy-lynis
+        baseurl: https://packages.cisofy.com/community/lynis/rpm/
+        description: CISOfy Software - Lynis package
+        file: cisofy-lynis
+        gpgcheck: true
+        gpgkey: https://packages.cisofy.com/keys/cisofy-software-rpms-public.key
+        priority: '2'
+
+    - name: Install lynis
+      yum:
+        name: lynis
+        state: present
+
+    - name: Run Lynis scan
+      command: "lynis audit system --quick"
+      register: lynis_result
+      changed_when: false
+      async: 900  # Allow the Lynis scan to run for 15 minutes
+      poll: 45    # Check status every 45 seconds
+
+    - name: Write Lynis results to file
+      copy:
+        content: "{{ lynis_result.stdout }}"
+        dest: "output/lynis-{{ inventory_hostname.split('.')[0] }}.txt"
+        mode: 0600
+      become: false
+      delegate_to: localhost
