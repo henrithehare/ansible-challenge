@@ -77,7 +77,7 @@ group_vars/all.yml
 2. Example syntax to SSH into an instance
 
 ```bash
-ssh -i files/ansible-sandbox.pem ec2-user@x.x.x.x
+ssh -i output/ansible-sandbox.pem ec2-user@x.x.x.x
 ```
 
 ## Cleaning up
